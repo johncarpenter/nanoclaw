@@ -13,8 +13,19 @@ import {
   ONECLI_URL,
   POLL_INTERVAL,
   TIMEZONE,
+  WEBHOOK_PORT,
 } from './config.js';
 import './channels/index.js';
+import { EventRouter } from './event-router.js';
+import {
+  getCronTriggers,
+  hasFileChangeTriggers,
+  hasWebhookTriggers,
+  IncomingEvent,
+  loadAllGroupEvents,
+} from './events.js';
+import { FileWatcher } from './file-watcher.js';
+import { createWebhookServer } from './webhooks.js';
 import {
   getChannelFactory,
   getRegisteredChannelNames,
@@ -77,6 +88,8 @@ let messageLoopRunning = false;
 
 const channels: Channel[] = [];
 const queue = new GroupQueue();
+let eventRouter: EventRouter | null = null;
+let fileWatcher: FileWatcher | null = null;
 
 const onecli = new OneCLI({ url: ONECLI_URL });
 
@@ -484,6 +497,39 @@ async function startMessageLoop(): Promise<void> {
             continue;
           }
 
+          // Route messages through event triggers (keyword/email pattern matching)
+          // This happens regardless of normal trigger requirements, since event
+          // triggers can route messages to OTHER groups based on content patterns.
+          if (eventRouter) {
+            for (const msg of groupMessages) {
+              const event: IncomingEvent = {
+                type: channel.name === 'gmail' ? 'email' : 'slack',
+                variables: {
+                  user: msg.sender_name || msg.sender,
+                  channel: chatJid,
+                  message: msg.content,
+                  from: msg.sender,
+                  subject: '', // channels can enrich this
+                  body: msg.content,
+                  timestamp: msg.timestamp,
+                  isMention: msg.content
+                    .trim()
+                    .toLowerCase()
+                    .startsWith(DEFAULT_TRIGGER.toLowerCase())
+                    ? 'true'
+                    : '',
+                },
+                rawContent: msg.content,
+              };
+              eventRouter.route(event).catch((err) =>
+                logger.error(
+                  { chatJid, err },
+                  'Error routing message through event triggers',
+                ),
+              );
+            }
+          }
+
           const isMainGroup = group.isMain === true;
           const needsTrigger = !isMainGroup && group.requiresTrigger !== false;
 
@@ -693,6 +739,43 @@ async function main(): Promise<void> {
   if (channels.length === 0) {
     logger.fatal('No channels connected');
     process.exit(1);
+  }
+
+  // --- Event triggers (events.yaml) ---
+  const groupEvents = loadAllGroupEvents(registeredGroups);
+  if (groupEvents.size > 0) {
+    eventRouter = new EventRouter(groupEvents, {
+      registeredGroups: () => registeredGroups,
+      queue,
+      channels,
+      findChannel,
+      getSessions: () => sessions,
+      setSessions: (folder, sessionId) => {
+        sessions[folder] = sessionId;
+        setSession(folder, sessionId);
+      },
+    });
+
+    // Start webhook server if any group has webhook triggers
+    if (hasWebhookTriggers(groupEvents)) {
+      createWebhookServer(eventRouter, WEBHOOK_PORT);
+    }
+
+    // Start file watcher if any group has file_change triggers
+    if (hasFileChangeTriggers(groupEvents)) {
+      fileWatcher = new FileWatcher(eventRouter, groupEvents);
+      fileWatcher.start();
+    }
+
+    // Register cron triggers from events.yaml with the task scheduler via IPC
+    // (they'll be picked up by the existing scheduler loop)
+    const cronTriggers = getCronTriggers(groupEvents);
+    if (cronTriggers.length > 0) {
+      logger.info(
+        { count: cronTriggers.length },
+        'Cron triggers from events.yaml (managed by scheduler)',
+      );
+    }
   }
 
   // Start subsystems (independently of connection handler)
