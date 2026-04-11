@@ -99,10 +99,7 @@ export class FileWatcher {
           rawContent: `File ${fsEvent}: ${filePath}`,
         };
         this.router.route(event).catch((err) => {
-          logger.error(
-            { filePath, err },
-            'Error routing file change event',
-          );
+          logger.error({ filePath, err }, 'Error routing file change event');
         });
       }, this.debounceMs),
     );

@@ -178,6 +178,18 @@ function buildVolumeMounts(
       fs.cpSync(srcDir, dstDir, { recursive: true });
     }
   }
+
+  // Sync per-group skills from the group folder into .claude/skills/
+  // This allows each group to define its own slash commands (e.g. /log-meal)
+  const groupSkillsSrc = path.join(groupDir, 'skills');
+  if (fs.existsSync(groupSkillsSrc)) {
+    for (const skillDir of fs.readdirSync(groupSkillsSrc)) {
+      const srcDir = path.join(groupSkillsSrc, skillDir);
+      if (!fs.statSync(srcDir).isDirectory()) continue;
+      const dstDir = path.join(skillsDst, skillDir);
+      fs.cpSync(srcDir, dstDir, { recursive: true });
+    }
+  }
   mounts.push({
     hostPath: groupSessionsDir,
     containerPath: '/home/node/.claude',

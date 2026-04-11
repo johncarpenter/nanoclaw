@@ -61,7 +61,8 @@ describe('EventRouter matching', () => {
     });
 
     expect(deps.queue.enqueueTask).toHaveBeenCalledTimes(1);
-    const call = (deps.queue.enqueueTask as ReturnType<typeof vi.fn>).mock.calls[0];
+    const call = (deps.queue.enqueueTask as ReturnType<typeof vi.fn>).mock
+      .calls[0];
     expect(call[0]).toBe('finance@g.us'); // dispatched to finance group
   });
 
@@ -71,9 +72,7 @@ describe('EventRouter matching', () => {
       [
         'finance',
         {
-          triggers: [
-            { type: 'email', match: { from: '*@harvest.com' } },
-          ],
+          triggers: [{ type: 'email', match: { from: '*@harvest.com' } }],
         },
       ],
     ]);
@@ -245,7 +244,10 @@ describe('EventRouter matching', () => {
 
     await router.route({
       type: 'file_change',
-      variables: { path: 'gdrive/shared/financials/report.md', event: 'modified' },
+      variables: {
+        path: 'gdrive/shared/financials/report.md',
+        event: 'modified',
+      },
       rawContent: 'file modified',
     });
 
@@ -258,17 +260,13 @@ describe('EventRouter matching', () => {
       [
         'finance',
         {
-          triggers: [
-            { type: 'slack', match: { keywords: ['budget'] } },
-          ],
+          triggers: [{ type: 'slack', match: { keywords: ['budget'] } }],
         },
       ],
       [
         'devops',
         {
-          triggers: [
-            { type: 'slack', match: { keywords: ['budget'] } },
-          ],
+          triggers: [{ type: 'slack', match: { keywords: ['budget'] } }],
         },
       ],
     ]);
@@ -277,7 +275,11 @@ describe('EventRouter matching', () => {
 
     await router.route({
       type: 'slack',
-      variables: { channel: '#general', message: 'The budget is approved', user: 'ceo' },
+      variables: {
+        channel: '#general',
+        message: 'The budget is approved',
+        user: 'ceo',
+      },
       rawContent: 'The budget is approved',
     });
 
@@ -339,9 +341,7 @@ describe('EventRouter matching', () => {
       [
         'finance',
         {
-          triggers: [
-            { type: 'slack', match: { mention: true } },
-          ],
+          triggers: [{ type: 'slack', match: { mention: true } }],
         },
       ],
     ]);

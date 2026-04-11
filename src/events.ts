@@ -77,7 +77,10 @@ export function loadGroupEvents(groupDir: string): GroupEvents | null {
     const parsed = YAML.parse(raw) as GroupEvents;
 
     if (!parsed?.triggers || !Array.isArray(parsed.triggers)) {
-      logger.warn({ groupDir }, 'events.yaml missing or invalid triggers array');
+      logger.warn(
+        { groupDir },
+        'events.yaml missing or invalid triggers array',
+      );
       return null;
     }
 
@@ -124,7 +127,10 @@ export function renderPrompt(
   template: string,
   vars: Record<string, string>,
 ): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+  return template.replace(
+    /\{\{(\w+)\}\}/g,
+    (_, key) => vars[key] ?? `{{${key}}}`,
+  );
 }
 
 // --- Helpers ---

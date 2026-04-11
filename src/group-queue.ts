@@ -129,6 +129,10 @@ export class GroupQueue {
     );
   }
 
+  getContainerName(groupJid: string): string | null {
+    return this.groups.get(groupJid)?.containerName ?? null;
+  }
+
   registerProcess(
     groupJid: string,
     proc: ChildProcess,

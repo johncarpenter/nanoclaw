@@ -6,7 +6,12 @@ import {
   runContainerAgent,
   writeTasksSnapshot,
 } from './container-runner.js';
-import { getAllTasks, deleteSession, getAllSessions, setSession } from './db.js';
+import {
+  getAllTasks,
+  deleteSession,
+  getAllSessions,
+  setSession,
+} from './db.js';
 import {
   globMatch,
   GroupEvents,
@@ -143,7 +148,9 @@ export class EventRouter {
   private buildOutputsHint(outputs: GroupEvents['outputs']): string {
     const parts: string[] = [];
     if (outputs?.slack?.length) {
-      parts.push(`Your default Slack output channels: ${outputs.slack.join(', ')}`);
+      parts.push(
+        `Your default Slack output channels: ${outputs.slack.join(', ')}`,
+      );
     }
     if (outputs?.gdrive) {
       parts.push(`Your default GDrive output path: ${outputs.gdrive}`);

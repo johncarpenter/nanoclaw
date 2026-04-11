@@ -93,6 +93,12 @@ export interface Channel {
   disconnect(): Promise<void>;
   // Optional: typing indicator. Channels that support it implement it.
   setTyping?(jid: string, isTyping: boolean): Promise<void>;
+  // Optional: post a temporary placeholder message, returns message ID for later update/delete.
+  postPlaceholder?(jid: string, text: string): Promise<string | undefined>;
+  // Optional: update a previously posted message by ID.
+  updateMessage?(jid: string, messageId: string, text: string): Promise<void>;
+  // Optional: delete a previously posted message by ID.
+  deleteMessage?(jid: string, messageId: string): Promise<void>;
   // Optional: sync group/chat names from the platform.
   syncGroups?(force: boolean): Promise<void>;
 }

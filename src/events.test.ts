@@ -27,10 +27,16 @@ describe('globMatch', () => {
 
   it('matches file path patterns with single wildcard', () => {
     expect(
-      globMatch('gdrive/shared/financials/report.md', 'gdrive/shared/financials/*.md'),
+      globMatch(
+        'gdrive/shared/financials/report.md',
+        'gdrive/shared/financials/*.md',
+      ),
     ).toBe(true);
     expect(
-      globMatch('gdrive/shared/financials/deep/report.md', 'gdrive/shared/financials/*.md'),
+      globMatch(
+        'gdrive/shared/financials/deep/report.md',
+        'gdrive/shared/financials/*.md',
+      ),
     ).toBe(false);
   });
 
@@ -52,10 +58,10 @@ describe('globMatch', () => {
 
 describe('renderPrompt', () => {
   it('replaces template variables', () => {
-    const result = renderPrompt(
-      'Email from {{from}}: {{subject}}',
-      { from: 'john@test.com', subject: 'Hello' },
-    );
+    const result = renderPrompt('Email from {{from}}: {{subject}}', {
+      from: 'john@test.com',
+      subject: 'Hello',
+    });
     expect(result).toBe('Email from john@test.com: Hello');
   });
 
@@ -139,7 +145,10 @@ outputs:
 describe('helper functions', () => {
   it('hasWebhookTriggers returns true when webhooks exist', () => {
     const events = new Map<string, GroupEvents>([
-      ['finance', { triggers: [{ type: 'webhook', match: { path: '/hooks/stripe' } }] }],
+      [
+        'finance',
+        { triggers: [{ type: 'webhook', match: { path: '/hooks/stripe' } }] },
+      ],
     ]);
     expect(hasWebhookTriggers(events)).toBe(true);
   });
@@ -153,7 +162,10 @@ describe('helper functions', () => {
 
   it('hasFileChangeTriggers detects file_change triggers', () => {
     const events = new Map<string, GroupEvents>([
-      ['devops', { triggers: [{ type: 'file_change', match: { paths: ['*.md'] } }] }],
+      [
+        'devops',
+        { triggers: [{ type: 'file_change', match: { paths: ['*.md'] } }] },
+      ],
     ]);
     expect(hasFileChangeTriggers(events)).toBe(true);
   });
@@ -172,7 +184,9 @@ describe('helper functions', () => {
       [
         'devops',
         {
-          triggers: [{ type: 'cron', schedule: '0 9 * * 1', prompt: 'Weekly check' }],
+          triggers: [
+            { type: 'cron', schedule: '0 9 * * 1', prompt: 'Weekly check' },
+          ],
         },
       ],
     ]);

@@ -39,6 +39,7 @@ import {
 import {
   cleanupOrphans,
   ensureContainerRuntimeRunning,
+  stopContainer,
 } from './container-runtime.js';
 import {
   getAllChats,
@@ -297,6 +298,12 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
   let hadError = false;
   let outputSentToUser = false;
 
+  // Post a "thinking" placeholder for channels that support it
+  let placeholderId: string | undefined;
+  if (channel.postPlaceholder) {
+    placeholderId = await channel.postPlaceholder(chatJid, '_Thinking..._');
+  }
+
   const output = await runAgent(group, prompt, chatJid, async (result) => {
     // Streaming output callback — called for each agent result
     if (result.result) {
@@ -308,8 +315,17 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
       const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
       logger.info({ group: group.name }, `Agent output: ${raw.length} chars`);
       if (text) {
-        await channel.sendMessage(chatJid, text);
-        outputSentToUser = true;
+        const formatted = formatOutbound(text, channel.name as ChannelType);
+        if (formatted) {
+          // Replace placeholder with first real response, then post normally after
+          if (placeholderId && channel.updateMessage) {
+            await channel.updateMessage(chatJid, placeholderId, formatted);
+            placeholderId = undefined;
+          } else {
+            await channel.sendMessage(chatJid, formatted);
+          }
+          outputSentToUser = true;
+        }
       }
       // Only reset idle timer on actual results, not session-update markers (result: null)
       resetIdleTimer();
@@ -326,6 +342,11 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
+
+  // Clean up placeholder if no output was sent (error or empty response)
+  if (placeholderId && channel.deleteMessage) {
+    await channel.deleteMessage(chatJid, placeholderId);
+  }
 
   if (output === 'error' || hadError) {
     // If we already sent output to the user, don't roll back the cursor —
@@ -522,12 +543,14 @@ async function startMessageLoop(): Promise<void> {
                 },
                 rawContent: msg.content,
               };
-              eventRouter.route(event).catch((err) =>
-                logger.error(
-                  { chatJid, err },
-                  'Error routing message through event triggers',
-                ),
-              );
+              eventRouter
+                .route(event)
+                .catch((err) =>
+                  logger.error(
+                    { chatJid, err },
+                    'Error routing message through event triggers',
+                  ),
+                );
             }
           }
 
@@ -681,14 +704,48 @@ async function main(): Promise<void> {
     }
   }
 
+  // Handle /restart-session command — clears session and stops container
+  async function handleRestartSession(chatJid: string): Promise<void> {
+    const group = registeredGroups[chatJid];
+    if (!group) return;
+
+    const channel = findChannel(channels, chatJid);
+    if (!channel) return;
+
+    // Stop running container if any
+    const containerName = queue.getContainerName(chatJid);
+    if (containerName) {
+      try {
+        stopContainer(containerName);
+        logger.info({ chatJid, containerName }, 'Container stopped for session restart');
+      } catch (err) {
+        logger.warn({ chatJid, containerName, err }, 'Failed to stop container');
+      }
+    }
+
+    // Clear session ID
+    delete sessions[group.folder];
+    deleteSession(group.folder);
+
+    logger.info({ chatJid, group: group.name }, 'Session restarted');
+    await channel.sendMessage(chatJid, 'Session restarted. Next message will start a fresh session with updated config.');
+  }
+
   // Channel callbacks (shared by all channels)
   const channelOpts = {
     onMessage: (chatJid: string, msg: NewMessage) => {
-      // Remote control commands — intercept before storage
+      // Orchestrator commands — intercept before storage
       const trimmed = msg.content.trim();
       if (trimmed === '/remote-control' || trimmed === '/remote-control-end') {
         handleRemoteControl(trimmed, chatJid, msg).catch((err) =>
           logger.error({ err, chatJid }, 'Remote control command error'),
+        );
+        return;
+      }
+
+      if (trimmed === '/restart-session') {
+        handleRestartSession(chatJid).catch((err) =>
+          logger.error({ err, chatJid }, 'Restart session command error'),
         );
         return;
       }

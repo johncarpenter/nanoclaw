@@ -366,6 +366,25 @@ function waitForIpcMessage(): Promise<string | null> {
 }
 
 /**
+ * Load MCP server configs from user settings.json so they're passed inline
+ * to the SDK. This ensures MCP servers defined in settings are always started,
+ * regardless of how settingSources handles mcpServers merging.
+ */
+function loadSettingsMcpServers(): Record<string, { command: string; args: string[]; env?: Record<string, string> }> {
+  const settingsPath = path.join(process.env.HOME || '/home/node', '.claude', 'settings.json');
+  try {
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    if (settings.mcpServers && typeof settings.mcpServers === 'object') {
+      log(`Loaded ${Object.keys(settings.mcpServers).length} MCP server(s) from settings.json`);
+      return settings.mcpServers;
+    }
+  } catch {
+    /* settings.json not found or invalid — ignore */
+  }
+  return {};
+}
+
+/**
  * Run a single query and stream results via writeOutput.
  * Uses MessageStream (AsyncIterable) to keep isSingleUserTurn=false,
  * allowing agent teams subagents to run to completion.
@@ -468,7 +487,7 @@ async function runQuery(
         'ToolSearch',
         'Skill',
         'NotebookEdit',
-        'mcp__nanoclaw__*',
+        'mcp__*',
       ],
       env: sdkEnv,
       permissionMode: 'bypassPermissions',
@@ -484,6 +503,7 @@ async function runQuery(
             NANOCLAW_IS_MAIN: containerInput.isMain ? '1' : '0',
           },
         },
+        ...loadSettingsMcpServers(),
       },
       hooks: {
         PreCompact: [

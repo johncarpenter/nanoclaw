@@ -19,7 +19,13 @@ function request(
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { hostname: '127.0.0.1', port, method, path, headers: { 'Content-Type': 'application/json' } },
+      {
+        hostname: '127.0.0.1',
+        port,
+        method,
+        path,
+        headers: { 'Content-Type': 'application/json' },
+      },
       (res) => {
         const chunks: Buffer[] = [];
         res.on('data', (chunk) => chunks.push(chunk));
@@ -89,49 +95,59 @@ describe('webhook server', () => {
   });
 
   it('returns 400 for invalid JSON', async () => {
-    const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-      const req = http.request(
-        { hostname: '127.0.0.1', port, method: 'POST', path: '/hooks/test' },
-        (r) => {
-          const chunks: Buffer[] = [];
-          r.on('data', (c) => chunks.push(c));
-          r.on('end', () =>
-            resolve({ status: r.statusCode!, body: Buffer.concat(chunks).toString() }),
-          );
-        },
-      );
-      req.on('error', reject);
-      req.write('not json');
-      req.end();
-    });
+    const res = await new Promise<{ status: number; body: string }>(
+      (resolve, reject) => {
+        const req = http.request(
+          { hostname: '127.0.0.1', port, method: 'POST', path: '/hooks/test' },
+          (r) => {
+            const chunks: Buffer[] = [];
+            r.on('data', (c) => chunks.push(c));
+            r.on('end', () =>
+              resolve({
+                status: r.statusCode!,
+                body: Buffer.concat(chunks).toString(),
+              }),
+            );
+          },
+        );
+        req.on('error', reject);
+        req.write('not json');
+        req.end();
+      },
+    );
     expect(res.status).toBe(400);
   });
 
   it('extracts GitHub event type from header', async () => {
-    const res = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-      const req = http.request(
-        {
-          hostname: '127.0.0.1',
-          port,
-          method: 'POST',
-          path: '/hooks/github',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-github-event': 'push',
+    const res = await new Promise<{ status: number; body: string }>(
+      (resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            method: 'POST',
+            path: '/hooks/github',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-github-event': 'push',
+            },
           },
-        },
-        (r) => {
-          const chunks: Buffer[] = [];
-          r.on('data', (c) => chunks.push(c));
-          r.on('end', () =>
-            resolve({ status: r.statusCode!, body: Buffer.concat(chunks).toString() }),
-          );
-        },
-      );
-      req.on('error', reject);
-      req.write(JSON.stringify({ ref: 'refs/heads/main' }));
-      req.end();
-    });
+          (r) => {
+            const chunks: Buffer[] = [];
+            r.on('data', (c) => chunks.push(c));
+            r.on('end', () =>
+              resolve({
+                status: r.statusCode!,
+                body: Buffer.concat(chunks).toString(),
+              }),
+            );
+          },
+        );
+        req.on('error', reject);
+        req.write(JSON.stringify({ ref: 'refs/heads/main' }));
+        req.end();
+      },
+    );
 
     expect(res.status).toBe(200);
     await new Promise((r) => setTimeout(r, 10));
