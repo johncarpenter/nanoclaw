@@ -210,7 +210,10 @@ export class SlackChannel implements Channel {
     // no-op: Slack Bot API has no typing indicator endpoint
   }
 
-  async postPlaceholder(jid: string, text: string): Promise<string | undefined> {
+  async postPlaceholder(
+    jid: string,
+    text: string,
+  ): Promise<string | undefined> {
     const channelId = jid.replace(/^slack:/, '');
     try {
       const result = await this.app.client.chat.postMessage({
@@ -224,7 +227,11 @@ export class SlackChannel implements Channel {
     }
   }
 
-  async updateMessage(jid: string, messageId: string, text: string): Promise<void> {
+  async updateMessage(
+    jid: string,
+    messageId: string,
+    text: string,
+  ): Promise<void> {
     const channelId = jid.replace(/^slack:/, '');
     try {
       await this.app.client.chat.update({

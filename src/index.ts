@@ -717,9 +717,15 @@ async function main(): Promise<void> {
     if (containerName) {
       try {
         stopContainer(containerName);
-        logger.info({ chatJid, containerName }, 'Container stopped for session restart');
+        logger.info(
+          { chatJid, containerName },
+          'Container stopped for session restart',
+        );
       } catch (err) {
-        logger.warn({ chatJid, containerName, err }, 'Failed to stop container');
+        logger.warn(
+          { chatJid, containerName, err },
+          'Failed to stop container',
+        );
       }
     }
 
@@ -728,7 +734,10 @@ async function main(): Promise<void> {
     deleteSession(group.folder);
 
     logger.info({ chatJid, group: group.name }, 'Session restarted');
-    await channel.sendMessage(chatJid, 'Session restarted. Next message will start a fresh session with updated config.');
+    await channel.sendMessage(
+      chatJid,
+      'Session restarted. Next message will start a fresh session with updated config.',
+    );
   }
 
   // Channel callbacks (shared by all channels)
