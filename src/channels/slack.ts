@@ -4,6 +4,7 @@ import type { GenericMessageEvent, BotMessageEvent } from '@slack/types';
 import { ASSISTANT_NAME, TRIGGER_PATTERN } from '../config.js';
 import { updateChatName } from '../db.js';
 import { readEnvFile } from '../env.js';
+import { buildImageMarker } from '../image-util.js';
 import { logger } from '../logger.js';
 import { registerChannel, ChannelOpts } from './registry.js';
 import {
@@ -77,7 +78,7 @@ export class SlackChannel implements Channel {
       // After filtering, event is either GenericMessageEvent or BotMessageEvent
       const msg = event as HandledMessageEvent;
 
-      if (!msg.text) return;
+      if (!msg.text && !(msg as GenericMessageEvent).files?.length) return;
 
       // Threaded replies are flattened into the channel conversation.
       // The agent sees them alongside channel-level messages; responses
@@ -109,7 +110,7 @@ export class SlackChannel implements Channel {
       // Translate Slack <@UBOTID> mentions into TRIGGER_PATTERN format.
       // Slack encodes @mentions as <@U12345>, which won't match TRIGGER_PATTERN
       // (e.g., ^@<ASSISTANT_NAME>\b), so we prepend the trigger when the bot is @mentioned.
-      let content = msg.text;
+      let content = msg.text || '';
       if (this.botUserId && !isBotMessage) {
         const mentionPattern = `<@${this.botUserId}>`;
         if (
@@ -117,6 +118,20 @@ export class SlackChannel implements Channel {
           !TRIGGER_PATTERN.test(content)
         ) {
           content = `@${ASSISTANT_NAME} ${content}`;
+        }
+      }
+
+      // Append image markers for any attached files (downloaded later at send-time)
+      const files = (msg as GenericMessageEvent).files;
+      if (files?.length && !isBotMessage) {
+        for (const file of files) {
+          const mimetype = file.mimetype || '';
+          const url = (file as { url_private_download?: string }).url_private_download
+            || (file as { url_private?: string }).url_private
+            || '';
+          if (mimetype.startsWith('image/') && url && file.id) {
+            content += `\n${buildImageMarker('slack', file.id, mimetype, url)}`;
+          }
         }
       }
 
@@ -254,6 +269,17 @@ export class SlackChannel implements Channel {
     } catch (err) {
       logger.warn({ jid, messageId, err }, 'Failed to delete Slack message');
     }
+  }
+
+  async downloadFile(url: string): Promise<Buffer> {
+    const env = readEnvFile(['SLACK_BOT_TOKEN']);
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+    });
+    if (!response.ok) {
+      throw new Error(`Slack file download failed: ${response.status}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
   }
 
   /**

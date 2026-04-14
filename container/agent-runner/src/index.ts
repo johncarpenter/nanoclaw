@@ -26,6 +26,7 @@ import { fileURLToPath } from 'url';
 
 interface ContainerInput {
   prompt: string;
+  images?: Array<{ mediaType: string; base64Data: string }>;
   sessionId?: string;
   groupFolder: string;
   chatJid: string;
@@ -53,9 +54,13 @@ interface SessionsIndex {
   entries: SessionEntry[];
 }
 
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+
 interface SDKUserMessage {
   type: 'user';
-  message: { role: 'user'; content: string };
+  message: { role: 'user'; content: string | ContentBlock[] };
   parent_tool_use_id: null;
   session_id: string;
 }
@@ -73,10 +78,10 @@ class MessageStream {
   private waiting: (() => void) | null = null;
   private done = false;
 
-  push(text: string): void {
+  push(content: string | ContentBlock[]): void {
     this.queue.push({
       type: 'user',
-      message: { role: 'user', content: text },
+      message: { role: 'user', content },
       parent_tool_use_id: null,
       session_id: '',
     });
@@ -403,7 +408,26 @@ async function runQuery(
   closedDuringQuery: boolean;
 }> {
   const stream = new MessageStream();
-  stream.push(prompt);
+
+  // Build multimodal content if images are present
+  if (containerInput.images?.length) {
+    const blocks: ContentBlock[] = [];
+    for (const img of containerInput.images) {
+      blocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: img.mediaType,
+          data: img.base64Data,
+        },
+      });
+    }
+    blocks.push({ type: 'text', text: prompt });
+    log(`Sending multimodal prompt with ${containerInput.images.length} image(s)`);
+    stream.push(blocks);
+  } else {
+    stream.push(prompt);
+  }
 
   // Poll IPC for follow-up messages and _close sentinel during the query
   let ipcPolling = true;

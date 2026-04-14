@@ -61,8 +61,10 @@ import {
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
 import { startIpcWatcher } from './ipc.js';
+import { extractAllImageMarkers, downloadImages } from './image-util.js';
 import { findChannel, formatMessages, formatOutbound } from './router.js';
 import { ChannelType } from './text-styles.js';
+import { ImageBlock } from './types.js';
 import {
   restoreRemoteControl,
   startRemoteControl,
@@ -268,6 +270,17 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
 
   const prompt = formatMessages(missedMessages, TIMEZONE);
 
+  // Extract and download any images attached to messages
+  let images: ImageBlock[] = [];
+  const imageMarkers = extractAllImageMarkers(missedMessages);
+  if (imageMarkers.length > 0 && channel.downloadFile) {
+    logger.info(
+      { group: group.name, imageCount: imageMarkers.length },
+      'Downloading image attachments',
+    );
+    images = await downloadImages(imageMarkers, channel);
+  }
+
   // Advance cursor so the piping path in startMessageLoop won't re-fetch
   // these messages. Save the old cursor so we can roll back on error.
   const previousCursor = lastAgentTimestamp[chatJid] || '';
@@ -338,7 +351,7 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     if (result.status === 'error') {
       hadError = true;
     }
-  });
+  }, images);
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);
@@ -376,6 +389,7 @@ async function runAgent(
   prompt: string,
   chatJid: string,
   onOutput?: (output: ContainerOutput) => Promise<void>,
+  promptImages?: ImageBlock[],
 ): Promise<'success' | 'error'> {
   const isMain = group.isMain === true;
   const sessionId = sessions[group.folder];
@@ -422,6 +436,7 @@ async function runAgent(
       group,
       {
         prompt,
+        images: promptImages?.length ? promptImages : undefined,
         sessionId,
         groupFolder: group.folder,
         chatJid,

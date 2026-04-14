@@ -1,5 +1,6 @@
 import { Channel, NewMessage } from './types.js';
 import { formatLocalTime } from './timezone.js';
+import { stripImageMarkers, extractImageMarkers } from './image-util.js';
 import { parseTextStyles, ChannelType } from './text-styles.js';
 
 export function escapeXml(s: string): string {
@@ -24,7 +25,11 @@ export function formatMessages(
       m.reply_to_message_content && m.reply_to_sender_name
         ? `\n  <quoted_message from="${escapeXml(m.reply_to_sender_name)}">${escapeXml(m.reply_to_message_content)}</quoted_message>`
         : '';
-    return `<message sender="${escapeXml(m.sender_name)}" time="${escapeXml(displayTime)}"${replyAttr}>${replySnippet}${escapeXml(m.content)}</message>`;
+    // Strip image markers from text (images are sent as separate content blocks)
+    const hasImages = extractImageMarkers(m.content).length > 0;
+    const cleanContent = stripImageMarkers(m.content);
+    const imageNote = hasImages ? ' [image attached]' : '';
+    return `<message sender="${escapeXml(m.sender_name)}" time="${escapeXml(displayTime)}"${replyAttr}>${replySnippet}${escapeXml(cleanContent)}${imageNote}</message>`;
   });
 
   const header = `<context timezone="${escapeXml(timezone)}" />\n`;

@@ -42,6 +42,20 @@ export interface RegisteredGroup {
   isMain?: boolean; // True for the main control group (no trigger, elevated privileges)
 }
 
+export interface ImageAttachment {
+  /** Marker stored in message content: [image:channel:fileId:mimetype:url] */
+  marker: string;
+  channel: string;
+  fileId: string;
+  mimetype: string;
+  url: string;
+}
+
+export interface ImageBlock {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  base64Data: string;
+}
+
 export interface NewMessage {
   id: string;
   chat_jid: string;
@@ -99,6 +113,8 @@ export interface Channel {
   updateMessage?(jid: string, messageId: string, text: string): Promise<void>;
   // Optional: delete a previously posted message by ID.
   deleteMessage?(jid: string, messageId: string): Promise<void>;
+  // Optional: download a file (e.g. image attachment) by URL, with channel-specific auth.
+  downloadFile?(url: string): Promise<Buffer>;
   // Optional: sync group/chat names from the platform.
   syncGroups?(force: boolean): Promise<void>;
 }
