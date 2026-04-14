@@ -19,6 +19,7 @@ import path from 'path';
 import { execFile } from 'child_process';
 import {
   query,
+  SDKUserMessage,
   HookCallback,
   PreCompactHookInput,
 } from '@anthropic-ai/claude-agent-sdk';
@@ -54,16 +55,11 @@ interface SessionsIndex {
   entries: SessionEntry[];
 }
 
+type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
 type ContentBlock =
   | { type: 'text'; text: string }
-  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
-
-interface SDKUserMessage {
-  type: 'user';
-  message: { role: 'user'; content: string | ContentBlock[] };
-  parent_tool_use_id: null;
-  session_id: string;
-}
+  | { type: 'image'; source: { type: 'base64'; media_type: ImageMediaType; data: string } };
 
 const IPC_INPUT_DIR = '/workspace/ipc/input';
 const IPC_INPUT_CLOSE_SENTINEL = path.join(IPC_INPUT_DIR, '_close');
@@ -417,7 +413,7 @@ async function runQuery(
         type: 'image',
         source: {
           type: 'base64',
-          media_type: img.mediaType,
+          media_type: img.mediaType as ImageMediaType,
           data: img.base64Data,
         },
       });
