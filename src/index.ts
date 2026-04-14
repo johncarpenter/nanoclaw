@@ -317,41 +317,47 @@ async function processGroupMessages(chatJid: string): Promise<boolean> {
     placeholderId = await channel.postPlaceholder(chatJid, '_Thinking..._');
   }
 
-  const output = await runAgent(group, prompt, chatJid, async (result) => {
-    // Streaming output callback — called for each agent result
-    if (result.result) {
-      const raw =
-        typeof result.result === 'string'
-          ? result.result
-          : JSON.stringify(result.result);
-      // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
-      const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
-      logger.info({ group: group.name }, `Agent output: ${raw.length} chars`);
-      if (text) {
-        const formatted = formatOutbound(text, channel.name as ChannelType);
-        if (formatted) {
-          // Replace placeholder with first real response, then post normally after
-          if (placeholderId && channel.updateMessage) {
-            await channel.updateMessage(chatJid, placeholderId, formatted);
-            placeholderId = undefined;
-          } else {
-            await channel.sendMessage(chatJid, formatted);
+  const output = await runAgent(
+    group,
+    prompt,
+    chatJid,
+    async (result) => {
+      // Streaming output callback — called for each agent result
+      if (result.result) {
+        const raw =
+          typeof result.result === 'string'
+            ? result.result
+            : JSON.stringify(result.result);
+        // Strip <internal>...</internal> blocks — agent uses these for internal reasoning
+        const text = raw.replace(/<internal>[\s\S]*?<\/internal>/g, '').trim();
+        logger.info({ group: group.name }, `Agent output: ${raw.length} chars`);
+        if (text) {
+          const formatted = formatOutbound(text, channel.name as ChannelType);
+          if (formatted) {
+            // Replace placeholder with first real response, then post normally after
+            if (placeholderId && channel.updateMessage) {
+              await channel.updateMessage(chatJid, placeholderId, formatted);
+              placeholderId = undefined;
+            } else {
+              await channel.sendMessage(chatJid, formatted);
+            }
+            outputSentToUser = true;
           }
-          outputSentToUser = true;
         }
+        // Only reset idle timer on actual results, not session-update markers (result: null)
+        resetIdleTimer();
       }
-      // Only reset idle timer on actual results, not session-update markers (result: null)
-      resetIdleTimer();
-    }
 
-    if (result.status === 'success') {
-      queue.notifyIdle(chatJid);
-    }
+      if (result.status === 'success') {
+        queue.notifyIdle(chatJid);
+      }
 
-    if (result.status === 'error') {
-      hadError = true;
-    }
-  }, images);
+      if (result.status === 'error') {
+        hadError = true;
+      }
+    },
+    images,
+  );
 
   await channel.setTyping?.(chatJid, false);
   if (idleTimer) clearTimeout(idleTimer);

@@ -126,9 +126,10 @@ export class SlackChannel implements Channel {
       if (files?.length && !isBotMessage) {
         for (const file of files) {
           const mimetype = file.mimetype || '';
-          const url = (file as { url_private_download?: string }).url_private_download
-            || (file as { url_private?: string }).url_private
-            || '';
+          const url =
+            (file as { url_private_download?: string }).url_private_download ||
+            (file as { url_private?: string }).url_private ||
+            '';
           if (mimetype.startsWith('image/') && url && file.id) {
             content += `\n${buildImageMarker('slack', file.id, mimetype, url)}`;
           }

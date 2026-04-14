@@ -81,10 +81,7 @@ export async function downloadImages(
         base64Data: buffer.toString('base64'),
       });
     } catch (err) {
-      logger.warn(
-        { fileId: marker.fileId, err },
-        'Failed to download image',
-      );
+      logger.warn({ fileId: marker.fileId, err }, 'Failed to download image');
     }
   }
 
