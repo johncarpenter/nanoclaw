@@ -85,7 +85,10 @@ export async function downloadImages(
       const buffer = await channel.downloadFile(marker.url);
 
       if (buffer.length === 0) {
-        logger.warn({ fileId: marker.fileId }, 'Downloaded empty image, skipping');
+        logger.warn(
+          { fileId: marker.fileId },
+          'Downloaded empty image, skipping',
+        );
         continue;
       }
 
@@ -97,15 +100,9 @@ export async function downloadImages(
         continue;
       }
 
-      // Validate magic bytes match declared mimetype
+      // Validate magic bytes — reject downloads that aren't real images
+      // (e.g., Slack returning an HTML error page instead of the file)
       const detected = detectMimeType(buffer);
-      const actualType = detected || marker.mimetype;
-      if (detected && detected !== marker.mimetype) {
-        logger.warn(
-          { fileId: marker.fileId, declared: marker.mimetype, detected },
-          'Image mimetype mismatch, using detected type',
-        );
-      }
       if (!detected) {
         logger.warn(
           {
@@ -114,7 +111,15 @@ export async function downloadImages(
             size: buffer.length,
             header: buffer.subarray(0, 8).toString('hex'),
           },
-          'Could not detect image type from magic bytes, using declared type',
+          'Downloaded data is not a valid image (bad magic bytes), skipping',
+        );
+        continue;
+      }
+      const actualType = detected;
+      if (detected !== marker.mimetype) {
+        logger.warn(
+          { fileId: marker.fileId, declared: marker.mimetype, detected },
+          'Image mimetype mismatch, using detected type',
         );
       }
 

@@ -275,11 +275,27 @@ export class SlackChannel implements Channel {
 
   async downloadFile(url: string): Promise<Buffer> {
     const env = readEnvFile(['SLACK_BOT_TOKEN']);
+    const token = env.SLACK_BOT_TOKEN;
+    if (!token) {
+      throw new Error('SLACK_BOT_TOKEN not set, cannot download file');
+    }
+    // Slack file URLs may redirect; fetch follows by default but we
+    // must ensure the auth header is only sent to Slack domains.
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: 'follow',
     });
     if (!response.ok) {
-      throw new Error(`Slack file download failed: ${response.status}`);
+      throw new Error(
+        `Slack file download failed: ${response.status} ${response.statusText}`,
+      );
+    }
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      throw new Error(
+        `Slack file download returned HTML instead of image (likely auth error). ` +
+          `Content-Type: ${contentType}, URL: ${url.slice(0, 80)}`,
+      );
     }
     return Buffer.from(await response.arrayBuffer());
   }
