@@ -17,6 +17,22 @@ const SUPPORTED_TYPES = new Set([
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024; // 5MB per image (Claude limit)
 const MAX_IMAGES_PER_PROMPT = 4;
 
+/** Magic byte signatures for validating downloaded image data. */
+const MAGIC_BYTES: Record<string, number[]> = {
+  'image/jpeg': [0xff, 0xd8, 0xff],
+  'image/png': [0x89, 0x50, 0x4e, 0x47],
+  'image/gif': [0x47, 0x49, 0x46],
+  'image/webp': [0x52, 0x49, 0x46, 0x46], // RIFF header
+};
+
+/** Detect actual image type from buffer magic bytes. */
+function detectMimeType(buffer: Buffer): string | null {
+  for (const [mime, bytes] of Object.entries(MAGIC_BYTES)) {
+    if (bytes.every((b, i) => buffer[i] === b)) return mime;
+  }
+  return null;
+}
+
 /** Build a marker string to embed in message content (stored in SQLite). */
 export function buildImageMarker(
   channel: string,
@@ -68,6 +84,11 @@ export async function downloadImages(
     try {
       const buffer = await channel.downloadFile(marker.url);
 
+      if (buffer.length === 0) {
+        logger.warn({ fileId: marker.fileId }, 'Downloaded empty image, skipping');
+        continue;
+      }
+
       if (buffer.length > MAX_IMAGE_SIZE) {
         logger.warn(
           { fileId: marker.fileId, size: buffer.length },
@@ -76,8 +97,34 @@ export async function downloadImages(
         continue;
       }
 
+      // Validate magic bytes match declared mimetype
+      const detected = detectMimeType(buffer);
+      const actualType = detected || marker.mimetype;
+      if (detected && detected !== marker.mimetype) {
+        logger.warn(
+          { fileId: marker.fileId, declared: marker.mimetype, detected },
+          'Image mimetype mismatch, using detected type',
+        );
+      }
+      if (!detected) {
+        logger.warn(
+          {
+            fileId: marker.fileId,
+            declared: marker.mimetype,
+            size: buffer.length,
+            header: buffer.subarray(0, 8).toString('hex'),
+          },
+          'Could not detect image type from magic bytes, using declared type',
+        );
+      }
+
+      logger.info(
+        { fileId: marker.fileId, size: buffer.length, mediaType: actualType },
+        'Image downloaded and validated',
+      );
+
       images.push({
-        mediaType: marker.mimetype as ImageBlock['mediaType'],
+        mediaType: actualType as ImageBlock['mediaType'],
         base64Data: buffer.toString('base64'),
       });
     } catch (err) {
