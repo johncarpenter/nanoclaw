@@ -43,6 +43,7 @@ import {
 } from './container-runtime.js';
 import {
   getAllChats,
+  createTask,
   getAllRegisteredGroups,
   getAllSessions,
   deleteSession,
@@ -51,12 +52,14 @@ import {
   getMessagesSince,
   getNewMessages,
   getRouterState,
+  getTaskById,
   initDatabase,
   setRegisteredGroup,
   setRouterState,
   setSession,
   storeChatMetadata,
   storeMessage,
+  updateTask,
 } from './db.js';
 import { GroupQueue } from './group-queue.js';
 import { resolveGroupFolderPath } from './group-folder.js';
@@ -855,14 +858,70 @@ async function main(): Promise<void> {
       fileWatcher.start();
     }
 
-    // Register cron triggers from events.yaml with the task scheduler via IPC
-    // (they'll be picked up by the existing scheduler loop)
+    // Sync cron triggers from events.yaml into the tasks table.
+    // Uses deterministic IDs so restarts don't create duplicates.
     const cronTriggers = getCronTriggers(groupEvents);
-    if (cronTriggers.length > 0) {
-      logger.info(
-        { count: cronTriggers.length },
-        'Cron triggers from events.yaml (managed by scheduler)',
+    for (const { groupFolder, trigger } of cronTriggers) {
+      const taskId = `event-cron-${groupFolder}-${trigger.schedule}`;
+      const existing = getTaskById(taskId);
+
+      // Find group JID for this folder
+      const groupEntry = Object.entries(registeredGroups).find(
+        ([_, g]) => g.folder === groupFolder,
       );
+      if (!groupEntry) {
+        logger.warn(
+          { groupFolder, schedule: trigger.schedule },
+          'No registered group for cron trigger, skipping',
+        );
+        continue;
+      }
+      const [groupJid] = groupEntry;
+
+      const cronExpr = trigger.schedule!;
+      const prompt = trigger.prompt || 'Scheduled cron task';
+
+      if (existing) {
+        // Update if prompt or schedule changed
+        if (
+          existing.prompt !== prompt ||
+          existing.schedule_value !== cronExpr
+        ) {
+          updateTask(taskId, {
+            prompt,
+            schedule_value: cronExpr,
+            status: 'active',
+          });
+          logger.info(
+            { taskId, schedule: cronExpr },
+            'Updated cron trigger task',
+          );
+        }
+      } else {
+        // Compute first run time
+        const { CronExpressionParser } = await import('cron-parser');
+        const interval = CronExpressionParser.parse(cronExpr, {
+          tz: TIMEZONE,
+        });
+        const nextRun = interval.next().toISOString();
+
+        createTask({
+          id: taskId,
+          group_folder: groupFolder,
+          chat_jid: groupJid,
+          prompt,
+          schedule_type: 'cron',
+          schedule_value: cronExpr,
+          context_mode: 'group',
+          next_run: nextRun,
+          status: 'active',
+          created_at: new Date().toISOString(),
+        });
+        logger.info(
+          { taskId, schedule: cronExpr, nextRun },
+          'Created cron trigger task from events.yaml',
+        );
+      }
     }
   }
 
